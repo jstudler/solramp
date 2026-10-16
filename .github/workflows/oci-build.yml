@@ -1,0 +1,85 @@
+name: oci-build
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      # Native amd64 only, so the smoke test below runs without emulation.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: solramp:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test bundled binaries
+        run: |
+          set -euo pipefail
+          run() { docker run --rm "$@"; }
+          run --entrypoint rsync   solramp:smoke --version | head -1
+          run --entrypoint ssh     solramp:smoke -V
+          run --entrypoint gphoto2 solramp:smoke --version | head -1
+          run --entrypoint gphoto2 solramp:smoke --auto-detect
+          run --entrypoint ping    solramp:smoke -c1 -W2 127.0.0.1 >/dev/null
+          run solramp:smoke --version
+          run solramp:smoke --help >/dev/null
+          run --entrypoint python solramp:smoke -c \
+            'import gphoto2,rawpy,numpy,astral,watchdog,yaml,zoneinfo; zoneinfo.ZoneInfo("UTC"); print("imports ok", gphoto2.gp_library_version(0)[0])'
+          run --entrypoint python solramp:smoke -c \
+            'import shutil; assert shutil.which("rsync") and shutil.which("ssh")'
+
+      - if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

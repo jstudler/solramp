@@ -1,0 +1,33 @@
+# solramp timelapse daemon (Linux / systemd).
+#
+# Edit the paths and User below, then:
+#   sudo cp packaging/solramp.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now solramp.service
+#   journalctl -u solramp -f
+
+[Unit]
+Description=solramp sun-driven day-to-night timelapse controller
+# Only matters for the ptpip transport; harmless for USB.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=CHANGEME
+ExecStart=/usr/bin/uv run --project /home/CHANGEME/solramp solramp \
+          --daemon \
+          --config /etc/solramp.toml \
+          --output-dir /srv/timelapse
+WorkingDirectory=/srv/timelapse
+
+# The daemon handles camera outages itself; this only covers a hard crash.
+Restart=always
+RestartSec=30
+
+# Give the current capture and pending downloads time to drain.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+# The build context is the repo root, which also holds multi-GB capture
+# directories. Deny everything, then re-admit only what the build needs.
+*
+
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+
+# Re-exclude cruft inside the re-admitted paths.
+**/__pycache__/
+**/*.pyc
+.DS_Store

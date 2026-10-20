@@ -1,0 +1,19 @@
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.benchmarks/
+*.egg-info/
+dist/
+build/
+
+# Captured frames and session output (large binaries)
+/captures/
+/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*/
+
+# Local editor cruft
+.DS_Store
+
+# Temporary Files
+tmp/*

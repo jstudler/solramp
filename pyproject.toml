@@ -1,0 +1,58 @@
+[project]
+name = "solramp"
+version = "0.1.0"
+description = "Sun-driven exposure ramping for 24/7 day-to-night timelapses on the Canon EOS 5D Mark IV over gphoto2 (PTP-IP or USB)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "Joel Studler" }]
+dependencies = [
+    # Camera control over PTP/IP. Bundles libgphoto2 in the wheel.
+    "gphoto2>=2.5.1",
+    # CR2 raw decoding for exposure analysis.
+    "rawpy>=0.22",
+    "numpy>=1.26",
+    # Sun position / astral times for day-night phase detection.
+    "astral>=3.2",
+    # Filesystem watcher used as a safety net for the analyser.
+    "watchdog>=4.0",
+    # Metadata side-car file format.
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+solramp = "solramp.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-benchmark>=4.0",
+    "ruff>=0.14",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/solramp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "e2e: tests that require a physically connected Canon camera (deselect with -m 'not e2e')",
+    "benchmark: performance benchmarks",
+]
+addopts = "-m 'not e2e'"
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Pinned explicitly: ruff's implicit default set changes between releases.
+# pycodestyle errors + pyflakes + bugbear.
+select = ["E4", "E7", "E9", "F", "B"]

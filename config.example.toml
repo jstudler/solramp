@@ -1,0 +1,226 @@
+# Example configuration for solramp.
+#
+# Every value here can also be supplied on the command line, where it takes
+# precedence over this file.  The capture OUTPUT DIRECTORY is the one exception:
+# it is CLI-only (--output-dir) and is never read from this file.
+#
+# Run with:  uv run solramp --config config.example.toml --interval 30
+
+# Camera transport: "ptpip" (network) or "usb".
+camera_transport = "usb"
+
+# Camera IP address or mDNS hostname for PTP-IP.
+# For USB transport this can be omitted.
+camera_address = "192.168.111.222"
+
+# Optional USB selector (model/port/serial fragment). When multiple USB cameras
+# are connected, this is required to pick one deterministically.
+# camera_selector = "usb:003,001"
+
+# Seconds between capture starts. Minimum 20 (CR2 transfer takes ~15 s).
+# Can be overridden with --interval. Shown here for completeness.
+interval_seconds = 20
+
+# Automatically find a safe starting exposure on launch (default false).
+auto_init = false
+
+# Keep the auto-init test frames in the .autoinit/ sub-folder for review
+# (default true). Set false to delete them once initialisation completes.
+auto_init_keep_files = true
+
+# When an --output-dir is given, create a timestamped sub-folder inside it and
+# use that as the working directory (default true). Set false to write directly
+# into --output-dir. Has no effect when --output-dir is omitted.
+create_timestamped_subdirectory = true
+
+# Leave in-camera Long Exposure Noise Reduction enabled (default true).
+# LENR doubles the blocking time of every long exposure (camera takes an
+# equal-length dark frame). Disabling halves long-exposure cycle time and keeps
+# the capture cadence near the interval, but removes the camera's own noise
+# reduction for exposures >= 1s. Set false to disable at connect time.
+long_exposure_nr = true
+
+# Stdout logging verbosity: DEBUG, INFO, WARNING, ERROR.
+log_level_stdout = "INFO"
+
+# Write a per-session log file into the capture directory (next to the CR2s
+# and the YAML sidecar). Enabled by default.
+log_file = true
+
+# Verbosity of the per-session log file: DEBUG, INFO, WARNING, ERROR.
+log_level_file = "INFO"
+
+# Start a new log file every interval, aligned to the local wall clock:
+# "10m", "1h", "4h", "1d", ... (minimum "1m"), or "off" for one solramp.log.
+# Files are named solramp_YYYY-MM-DD-HH-MM-SS.log. With rsync_dest set, finished
+# files are deleted locally once they have been uploaded.
+log_rotate = "1h"
+
+# Longest exposure = min(30, interval - shutter_margin_seconds).
+shutter_margin_seconds = 5
+
+# Hard floor on the interval.
+min_interval_seconds = 20
+
+# Capture/download retry counts.
+capture_retries = 5
+download_retries = 3
+
+# --- Daemon mode -----------------------------------------------------------
+# Keep running forever: wait for the camera, shoot one session per connection,
+# and start a fresh session folder after each outage. Requires --output-dir
+# (and create_timestamped_subdirectory, which is how each session gets its own
+# folder). Can also be enabled with --daemon.
+daemon = false
+
+# End the current session once this many intervals pass with no successful
+# capture. The daemon then waits for the camera again and the next session
+# starts in a NEW folder. Shorter outages are absorbed by the normal capture
+# retry + reconnect path and stay in the same session.
+camera_lost_cycles = 5
+
+# How often to look for the camera while idle (seconds). For ptpip this is one
+# ICMP ping; for usb it is one `gphoto2 --auto-detect`.
+daemon_poll_seconds = 15
+
+# --- Remote sync (storage-less capture) ------------------------------------
+# Ship every frame to another machine over rsync-over-SSH as soon as it has
+# been analysed. This is what makes a storage-less host (Raspberry Pi writing
+# into RAM) viable: the CR2 never touches the SD card and is freed immediately
+# after upload.
+#
+# MANDATORY when --output-dir is RAM-backed (/dev/shm, /run/shm, or any
+# tmpfs/ramfs mount) - the app refuses to start a session it cannot drain.
+#
+# In production prefer a dedicated, size-capped tmpfs over /dev/shm:
+#   mount -t tmpfs -o size=1500M tmpfs /mnt/capture
+# It gives a hard bound on RAM use and no competition from other processes.
+#
+# Destination in rsync's own syntax: [user@]host:/path, or a plain local path.
+# Shell-style "~" is not supported (remote tilde expansion is deliberately
+# disabled); write the absolute path.
+# rsync_dest = "pi@nas.local:/srv/timelapse"
+
+# SSH identity. Omit to use the normal ~/.ssh resolution (ssh_config IdentityFile,
+# agent, default key names) - that is the recommended setup. When set, the file
+# must not be group/world readable. Key material is NEVER accepted inline: it
+# would leak through `ps`.
+# rsync_ssh_key = "/home/pi/.ssh/timelapse_ed25519"
+
+# Non-standard SSH port.
+# rsync_ssh_port = 22
+
+# Cap upload bandwidth in KiB/s (rsync --bwlimit). Useful on a metered 5G link.
+# rsync_bwlimit = 2000
+
+# Per-transfer I/O timeout in seconds. A stalled 5G link fails this fast and the
+# batch is retried on the next frame instead of blocking the sync thread.
+rsync_timeout = 120
+
+# Delete the local CR2 once rsync confirms the transfer. Defaults to true when
+# the output directory is RAM-backed and false otherwise. Requires rsync_dest.
+# delete_synced_raw = true
+
+# How many un-uploaded frames may pile up before acting. Each 5D Mark IV frame
+# is ~35 MB, so 20 frames is ~700 MB of RAM.
+sync_backlog_limit = 20
+
+# What to do when the backlog limit (or free space) is hit:
+#   "abort"       - stop the session cleanly; every captured frame is kept
+#   "drop-oldest" - delete the oldest half of the backlog and keep shooting
+# "abort" is the safe default: losing the tail of a sequence beats losing
+# frames out of the middle of it.
+on_sync_backlog = "abort"
+
+# --- Visualizer dashboard --------------------------------------------------
+# A small web UI that renders the timelapse_metadata.yaml sidecars: session
+# info, a map, and synchronised exposure / analysis charts. It runs alongside
+# the capture by default and polls for changes, so the charts grow live.
+#
+# Watch `solramp --visualizer-only` to browse past sessions without a camera.
+[visualizer]
+enabled = true
+
+# Serve the dashboard and nothing else: no camera, no capture. Cannot be
+# combined with daemon mode. Also available as --visualizer-only.
+only = false
+
+# Bind address. The dashboard has NO authentication and exposes capture paths
+# and GPS coordinates, so it stays on loopback unless you deliberately publish
+# it (which logs a warning).
+host = "127.0.0.1"
+
+# Port to bind. 0 picks any free port; the bound URL is logged on start.
+port = 8000
+
+# Open a browser on start. Defaults to true only in `only` mode, because a
+# capture host is usually headless.
+# open_browser = false
+
+# Extra folders scanned recursively for timelapse_metadata.yaml, on top of
+# --output-dir (which is always watched).
+# additional_folders = ["/srv/timelapse/archive"]
+
+# --- Location (used for sun-altitude phase detection) ----------------------
+# Example only: the fundamental point of the Swiss national coordinates
+# (old observatory, Bern). Set this to your own shooting location.
+[location]
+name = "Bern"
+latitude = 46.951081
+longitude = 7.438637
+elevation = 542        # metres above sea level
+timezone = "Europe/Zurich"
+
+# --- Ramping / exposure tuning ---------------------------------------------
+[ramping]
+# Keep the brightest meaningful pixels this many stops below clipping. The
+# margin leaves headroom for a sun entering the frame at sunset (we must not
+# ramp back and forth).
+target_headroom_stops = 1.5
+
+# Ignore exposure errors smaller than this (stops). Also helps satisfy the
+# "two identical frames in a row" LRTimelapse rule.
+deadband_stops = 0.2
+
+# Clipping thresholds. White clipping is treated as worse than black clipping.
+white_clip_pct_threshold = 0.03   # % white-clipped pixels that forces darkening (DAY)
+black_clip_pct_threshold = 20.0  # % black-clipped pixels that lets us brighten past the dead-band
+white_clip_frac = 0.99           # channel >= this fraction of full-scale == clipped white
+black_clip_frac = 0.01           # channel <= this fraction of full-scale == clipped black
+highlight_percentile = 99.5      # luminance percentile used as the ETTR indicator
+
+# --- Day vs night tolerances -----------------------------------------------
+# Night frames are exposed brighter (more ETTR) so the shadows are not lifted
+# into noise in post. These NIGHT values blend smoothly into the DAY values
+# above as the sun crosses the twilight band, so the transition never jumps.
+target_headroom_stops_night = 0.5    # expose right up to clipping at night
+white_clip_pct_threshold_night = 5.0 # tolerate blown light sources at night
+
+# Hard ceiling on crushed-shadow pixels, enforced DAY and NIGHT. Above this the
+# engine adds light to rescue the shadows, overriding the phase gate, the
+# dead-band AND the white-clip protection (keeping blacks beats a clean
+# highlight - this is the most important night rule).
+black_clip_pct_limit = 70.0
+
+# Sun-altitude band (degrees) over which the day tolerances blend into the
+# night tolerances. >= day -> full day, <= night -> full night, linear between.
+day_altitude_deg = 6.0
+night_altitude_deg = -6.0
+
+# Decode CR2 at half resolution for ~4x faster analysis (plenty for metering).
+half_size_decode = true
+
+# Fast-transition anticipation: if this many consecutive frames are all more
+# than trend_ev_threshold EV off in the same direction, skip a step.
+trend_window = 3
+trend_ev_threshold = 1.0
+
+# Ramp limits (exact camera labels).
+# Aperture labels are read from the mounted lens at startup. If either configured
+# aperture limit is unavailable, the app warns and falls back to the full lens
+# range for this session.
+iso_dark_limit = "100"        # lowest ISO the ramp will use
+iso_bright_limit = "32000"    # highest ISO the ramp will use
+aperture_dark_limit = "22"    # narrowest aperture the ramp will use
+aperture_bright_limit = "2.8" # widest aperture the ramp will use
+shutter_dark_limit = "1/8000" # fastest shutter the ramp will use

@@ -1,0 +1,67 @@
+name: solramp
+
+services:
+  # USB-tethered camera. See the ptpip service below for the network variant.
+  solramp:
+    image: solramp:dev
+    init: true
+    restart: unless-stopped
+    # The app's shutdown path is SIGINT-driven; a long exposure plus in-camera
+    # long-exposure NR can take well over a minute to finish.
+    stop_signal: SIGINT
+    stop_grace_period: 180s
+    # A single CR2 is ~32MB and the default /dev/shm is 64MB.
+    shm_size: 2gb
+    # Without this the container runs in UTC and every session folder and frame
+    # filename is stamped hours off the wall clock the sequence was shot against.
+    environment:
+      TZ: ${TZ:-Europe/Zurich}
+    # Mount the whole directory, never a single --device: libgphoto2
+    # re-enumerates and the camera takes a new bus/device number after every
+    # power-cycle, which would leave a static device path dangling.
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      - ./captures:/captures
+      - ./config.toml:/config.toml:ro
+      - ${HOME}/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro
+      - ${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts:ro
+    # The bind mount above grants the path; this grants permission to open it.
+    # Major 189 is usb_device. Without it you get EPERM on a visible node.
+    device_cgroup_rules:
+      - "c 189:* rmw"
+    # The dashboard binds loopback by default, which is unreachable from outside
+    # the container. It has no authentication - keep the host side on loopback.
+    ports:
+      - "127.0.0.1:8000:8000"
+    command:
+      - --config=/config.toml
+      - --interval=30
+      - --auto-init
+      - --output-dir=/captures
+      - --visualizer-host=0.0.0.0
+
+  # PTP-IP over WiFi: no device wiring at all, so this runs anywhere.
+  # Start with: docker compose up ptpip
+  ptpip:
+    profiles: [ptpip]
+    image: solramp:dev
+    init: true
+    restart: unless-stopped
+    stop_signal: SIGINT
+    stop_grace_period: 180s
+    shm_size: 2gb
+    environment:
+      TZ: ${TZ:-Europe/Zurich}
+    volumes:
+      - ./captures:/captures
+      - ./config.toml:/config.toml:ro
+      - ${HOME}/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro
+      - ${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    command:
+      - --config=/config.toml
+      - --interval=30
+      - --auto-init
+      - --output-dir=/captures
+      - --visualizer-host=0.0.0.0

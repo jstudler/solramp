@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  solramp timelapse daemon (macOS).
+
+  This must be a LaunchAgent in the gui/<uid> domain, not a system daemon: the
+  user session is required to resolve the camera's ".local" mDNS name and to
+  access USB devices.
+
+  Edit every path below, then:
+    cp packaging/net.solramp.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.solramp.plist
+    launchctl kickstart -p gui/$(id -u)/net.solramp     # check it is running
+    launchctl bootout gui/$(id -u)/net.solramp          # stop + unload
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>net.solramp</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>--project</string>
+    <string>/Users/CHANGEME/solramp</string>
+    <string>solramp</string>
+    <string>--daemon</string>
+    <string>--config</string>
+    <string>/Users/CHANGEME/.config/solramp/config.toml</string>
+    <string>--output-dir</string>
+    <string>/Users/CHANGEME/Pictures/timelapse</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Restart only on a non-zero exit; a clean SIGTERM stop stays stopped. -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/CHANGEME/Pictures/timelapse</string>
+
+  <key>StandardOutPath</key>
+  <string>/Users/CHANGEME/Library/Logs/solramp.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/CHANGEME/Library/Logs/solramp.err.log</string>
+
+  <!-- launchd starts with a minimal PATH; uv and gphoto2 must be findable. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
